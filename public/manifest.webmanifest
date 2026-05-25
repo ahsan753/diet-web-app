@@ -1,0 +1,17 @@
+{
+  "name": "Fat-Loss Plan Dashboard",
+  "short_name": "Fat-Loss Plan",
+  "description": "Shared meal prep, training, shopping, supplements, and tracking dashboard.",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#020617",
+  "icons": [
+    {
+      "src": "./favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
