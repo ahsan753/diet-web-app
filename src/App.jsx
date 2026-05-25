@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   CalendarDays,
@@ -18,7 +18,40 @@ import {
   Info,
   UserRound,
   Users,
+  Trash2,
 } from "lucide-react";
+
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function shiftDays(isoDate, delta) {
+  const d = new Date(`${isoDate}T00:00:00`);
+  d.setDate(d.getDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+function useLocalStorage(key, initial) {
+  const [value, setValue] = useState(() => {
+    if (typeof window === "undefined") return initial;
+    try {
+      const raw = window.localStorage.getItem(key);
+      return raw !== null ? JSON.parse(raw) : initial;
+    } catch {
+      return initial;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    } catch {
+      // ignore quota / privacy-mode errors
+    }
+  }, [key, value]);
+
+  return [value, setValue];
+}
 
 const tabs = [
   { id: "overview", label: "Overview", icon: Users },
@@ -695,25 +728,64 @@ function PrepView() {
 }
 
 function ShoppingView() {
+  const [checked, setChecked] = useLocalStorage("shopping-checked-v1", {});
+
+  const toggle = (key) => {
+    setChecked((prev) => {
+      const next = { ...prev };
+      if (next[key]) delete next[key];
+      else next[key] = true;
+      return next;
+    });
+  };
+
+  const clearAll = () => setChecked({});
+  const checkedCount = Object.keys(checked).length;
+  const totalCount = shopping.reduce((sum, g) => sum + g.items.length, 0);
+
   return (
     <div>
       <SectionTitle icon={ShoppingCart} eyebrow="Lulu Hypermarket" title="Weekly shopping list">
         For both of you for 7 days.
       </SectionTitle>
+      <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-200">
+        <p className="text-sm font-medium text-slate-700">
+          {checkedCount} / {totalCount} ticked
+        </p>
+        <button
+          type="button"
+          onClick={clearAll}
+          disabled={checkedCount === 0}
+          className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-200 disabled:opacity-40"
+        >
+          Clear list
+        </button>
+      </div>
       <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
         {shopping.map((group) => (
           <div key={group.category} className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
             <h3 className="text-lg font-bold text-slate-950">{group.category}</h3>
             <div className="mt-4 space-y-2">
-              {group.items.map((item) => (
-                <label
-                  key={item}
-                  className="flex cursor-pointer items-start gap-3 rounded-2xl bg-slate-50 p-3 text-sm text-slate-700 hover:bg-slate-100"
-                >
-                  <input type="checkbox" className="mt-1 h-4 w-4 rounded border-slate-300" />
-                  <span>{item}</span>
-                </label>
-              ))}
+              {group.items.map((item) => {
+                const key = `${group.category}:${item}`;
+                const isChecked = !!checked[key];
+                return (
+                  <label
+                    key={item}
+                    className={`flex cursor-pointer items-start gap-3 rounded-2xl p-3 text-sm transition ${
+                      isChecked ? "bg-green-50 text-slate-400 line-through" : "bg-slate-50 text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => toggle(key)}
+                      className="mt-1 h-4 w-4 rounded border-slate-300"
+                    />
+                    <span>{item}</span>
+                  </label>
+                );
+              })}
             </div>
           </div>
         ))}
@@ -756,6 +828,233 @@ function SupplementsView() {
   );
 }
 
+const dailyChecklistItems = [
+  "Morning body weight after bathroom",
+  "Steps",
+  "Training completed or not",
+  "Calories and portions",
+  "Sleep length",
+];
+
+function DailyChecklistCard() {
+  const [data, setData] = useLocalStorage("daily-checklist-v1", { date: todayISO(), checked: {} });
+  const today = todayISO();
+
+  useEffect(() => {
+    if (data.date !== today) {
+      setData({ date: today, checked: {} });
+    }
+  }, [today, data.date, setData]);
+
+  const checked = data.date === today ? data.checked : {};
+  const toggle = (item) => {
+    setData({
+      date: today,
+      checked: { ...checked, [item]: !checked[item] },
+    });
+  };
+
+  const doneCount = Object.values(checked).filter(Boolean).length;
+
+  return (
+    <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-xl font-bold text-slate-950">Daily checklist</h3>
+          <p className="mt-1 text-sm text-slate-500">Resets automatically each day.</p>
+        </div>
+        <span className="shrink-0 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+          {doneCount} / {dailyChecklistItems.length}
+        </span>
+      </div>
+      <div className="mt-4 space-y-2">
+        {dailyChecklistItems.map((item) => {
+          const isChecked = !!checked[item];
+          return (
+            <label
+              key={item}
+              className={`flex cursor-pointer items-start gap-3 rounded-2xl p-3 text-sm transition ${
+                isChecked ? "bg-green-50 text-slate-400 line-through" : "bg-slate-50 text-slate-700"
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={isChecked}
+                onChange={() => toggle(item)}
+                className="mt-1 h-4 w-4 rounded border-slate-300"
+              />
+              <span>{item}</span>
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function WeightLogCard() {
+  const [selected, setSelected] = useState("him");
+  const [logHim, setLogHim] = useLocalStorage("weight-log-him-v1", []);
+  const [logHer, setLogHer] = useLocalStorage("weight-log-her-v1", []);
+  const log = selected === "him" ? logHim : logHer;
+  const setLog = selected === "him" ? setLogHim : setLogHer;
+
+  const [date, setDate] = useState(todayISO());
+  const [weight, setWeight] = useState("");
+  const [error, setError] = useState("");
+
+  const addEntry = (event) => {
+    event.preventDefault();
+    const w = Number.parseFloat(weight);
+    if (!date) {
+      setError("Pick a date.");
+      return;
+    }
+    if (!Number.isFinite(w) || w <= 0 || w > 500) {
+      setError("Enter a weight in kg.");
+      return;
+    }
+    setError("");
+    setLog((prev) => {
+      const without = prev.filter((entry) => entry.date !== date);
+      return [...without, { date, weight: w }].sort((a, b) => a.date.localeCompare(b.date));
+    });
+    setWeight("");
+  };
+
+  const deleteEntry = (entryDate) => {
+    setLog((prev) => prev.filter((entry) => entry.date !== entryDate));
+  };
+
+  const today = todayISO();
+  const sevenAgo = shiftDays(today, -7);
+  const fourteenAgo = shiftDays(today, -14);
+  const last7 = log.filter((e) => e.date > sevenAgo && e.date <= today);
+  const prev7 = log.filter((e) => e.date > fourteenAgo && e.date <= sevenAgo);
+  const mean = (arr) => (arr.length ? arr.reduce((s, e) => s + e.weight, 0) / arr.length : null);
+  const last7Avg = mean(last7);
+  const prev7Avg = mean(prev7);
+  const change = last7Avg != null && prev7Avg != null ? last7Avg - prev7Avg : null;
+
+  const sortedNewestFirst = [...log].sort((a, b) => b.date.localeCompare(a.date));
+
+  return (
+    <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200 lg:col-span-2">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-xl font-bold text-slate-950">Weight log</h3>
+          <p className="mt-1 text-sm text-slate-500">Morning body weight after the bathroom.</p>
+        </div>
+        <div className="flex rounded-2xl bg-slate-100 p-1 text-sm font-semibold">
+          <button
+            type="button"
+            onClick={() => setSelected("him")}
+            className={`rounded-xl px-3 py-1.5 ${selected === "him" ? "bg-white shadow-sm" : "text-slate-500"}`}
+          >
+            You
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelected("her")}
+            className={`rounded-xl px-3 py-1.5 ${selected === "her" ? "bg-white shadow-sm" : "text-slate-500"}`}
+          >
+            Wife
+          </button>
+        </div>
+      </div>
+
+      <form onSubmit={addEntry} className="mb-4 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+        <input
+          type="date"
+          value={date}
+          max={today}
+          onChange={(event) => setDate(event.target.value)}
+          className="rounded-2xl bg-slate-50 px-3 py-2.5 text-sm ring-1 ring-slate-200 focus:bg-white"
+        />
+        <input
+          type="number"
+          step="0.1"
+          inputMode="decimal"
+          placeholder="Weight (kg)"
+          value={weight}
+          onChange={(event) => setWeight(event.target.value)}
+          className="rounded-2xl bg-slate-50 px-3 py-2.5 text-sm ring-1 ring-slate-200 focus:bg-white"
+        />
+        <button
+          type="submit"
+          className="rounded-2xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+        >
+          Save
+        </button>
+      </form>
+      {error && (
+        <p className="mb-3 rounded-2xl bg-rose-50 p-3 text-sm text-rose-900 ring-1 ring-rose-100">{error}</p>
+      )}
+
+      <div className="mb-4 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-2xl bg-slate-50 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Last 7-day avg</p>
+          <p className="mt-1 text-2xl font-bold text-slate-950">
+            {last7Avg != null ? `${last7Avg.toFixed(1)} kg` : "—"}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">{last7.length} entries</p>
+        </div>
+        <div className="rounded-2xl bg-slate-50 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Prior 7-day avg</p>
+          <p className="mt-1 text-2xl font-bold text-slate-950">
+            {prev7Avg != null ? `${prev7Avg.toFixed(1)} kg` : "—"}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">{prev7.length} entries</p>
+        </div>
+        <div
+          className={`rounded-2xl p-4 ring-1 ${
+            change == null
+              ? "bg-slate-50 ring-transparent"
+              : change < -0.05
+                ? "bg-green-50 ring-green-100"
+                : change > 0.05
+                  ? "bg-amber-50 ring-amber-100"
+                  : "bg-slate-50 ring-transparent"
+          }`}
+        >
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Week-over-week</p>
+          <p className="mt-1 text-2xl font-bold text-slate-950">
+            {change == null ? "—" : `${change > 0 ? "+" : ""}${change.toFixed(2)} kg`}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            {change == null ? "Need 2 weeks of data" : change < 0 ? "Trending down" : change > 0 ? "Trending up" : "Flat"}
+          </p>
+        </div>
+      </div>
+
+      {sortedNewestFirst.length === 0 ? (
+        <p className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
+          No entries yet. Add your first weigh-in above.
+        </p>
+      ) : (
+        <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+          {sortedNewestFirst.map((entry) => (
+            <div key={entry.date} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 p-3 text-sm">
+              <div>
+                <p className="font-semibold text-slate-900">{entry.weight.toFixed(1)} kg</p>
+                <p className="text-xs text-slate-500">{entry.date}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => deleteEntry(entry.date)}
+                aria-label={`Delete entry for ${entry.date}`}
+                className="rounded-full bg-white p-2 text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100 hover:text-rose-600"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TrackingView() {
   return (
     <div>
@@ -763,19 +1062,7 @@ function TrackingView() {
         Use 7-day averages, not single weigh-ins.
       </SectionTitle>
       <div className="grid gap-5 lg:grid-cols-2">
-        <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-          <h3 className="text-xl font-bold text-slate-950">Daily checklist</h3>
-          <div className="mt-4 space-y-2">
-            {["Morning body weight after bathroom", "Steps", "Training completed or not", "Calories and portions", "Sleep length"].map(
-              (item) => (
-                <label key={item} className="flex cursor-pointer items-start gap-3 rounded-2xl bg-slate-50 p-3 text-sm text-slate-700">
-                  <input type="checkbox" className="mt-1 h-4 w-4 rounded border-slate-300" />
-                  <span>{item}</span>
-                </label>
-              ),
-            )}
-          </div>
-        </div>
+        <DailyChecklistCard />
         <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
           <h3 className="text-xl font-bold text-slate-950">Expected weekly loss</h3>
           <div className="mt-4 grid gap-3">
@@ -789,6 +1076,7 @@ function TrackingView() {
             </div>
           </div>
         </div>
+        <WeightLogCard />
         <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200 lg:col-span-2">
           <h3 className="text-xl font-bold text-slate-950">Adjustment protocol</h3>
           <div className="mt-4 grid gap-3 md:grid-cols-3">
@@ -860,7 +1148,7 @@ function MealsView() {
 
 export default function FatLossDashboard() {
   const [tab, setTab] = useState("overview");
-  const CurrentIcon = useMemo(() => tabs.find((t) => t.id === tab)?.icon || Users, [tab]);
+  const CurrentIcon = tabs.find((t) => t.id === tab)?.icon || Users;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-amber-50 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] text-slate-900 md:p-8">
