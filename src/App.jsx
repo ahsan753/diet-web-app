@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   CalendarDays,
+  CalendarCheck2,
   Dumbbell,
   ShoppingCart,
   Utensils,
@@ -15,20 +16,45 @@ import {
   Droplets,
   ChevronRight,
   CheckCircle2,
+  ClipboardCheck,
   Info,
   UserRound,
   Users,
   Trash2,
+  CalendarX2,
 } from "lucide-react";
 
 function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+  return toISODate(new Date());
+}
+
+function toISODate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function shiftDays(isoDate, delta) {
   const d = new Date(`${isoDate}T00:00:00`);
   d.setDate(d.getDate() + delta);
-  return d.toISOString().slice(0, 10);
+  return toISODate(d);
+}
+
+function dateFromISO(isoDate) {
+  return new Date(`${isoDate}T00:00:00`);
+}
+
+function weekdayName(isoDate = todayISO()) {
+  return dateFromISO(isoDate).toLocaleDateString(undefined, { weekday: "long" });
+}
+
+function readableDate(isoDate = todayISO()) {
+  return dateFromISO(isoDate).toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 function useLocalStorage(key, initial) {
@@ -54,6 +80,7 @@ function useLocalStorage(key, initial) {
 }
 
 const tabs = [
+  { id: "today", label: "Today", icon: CalendarCheck2 },
   { id: "overview", label: "Overview", icon: Users },
   { id: "meals", label: "Meals", icon: Utensils },
   { id: "recipes", label: "Recipes", icon: ChefHat },
@@ -849,6 +876,263 @@ const dailyChecklistItems = [
   "Sleep length",
 ];
 
+const orderedWeekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+function nextTrainingFrom(dayName) {
+  const startIndex = orderedWeekdays.indexOf(dayName);
+  for (let offset = 1; offset <= orderedWeekdays.length; offset += 1) {
+    const nextDay = orderedWeekdays[(startIndex + offset) % orderedWeekdays.length];
+    const session = training.find((item) => item.day === nextDay);
+    if (session) return { ...session, daysAway: offset };
+  }
+  return null;
+}
+
+function TodayWorkoutCard({ dayName }) {
+  const workout = training.find((item) => item.day === dayName);
+  const upcoming = workout ? null : nextTrainingFrom(dayName);
+
+  return (
+    <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200 lg:col-span-2">
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold text-slate-500">{dayName}</p>
+          <h3 className="text-xl font-bold text-slate-950">
+            {workout ? `${workout.session} day` : "Rest / recovery day"}
+          </h3>
+          <p className="mt-1 text-sm text-slate-600">
+            {workout
+              ? workout.note
+              : upcoming
+                ? `Next lift is ${upcoming.session} on ${upcoming.day}.`
+                : "No workout is scheduled in the split."}
+          </p>
+        </div>
+        <div className={`rounded-2xl p-3 ${workout ? "bg-slate-950" : "bg-slate-100"}`}>
+          {workout ? (
+            <Dumbbell className="h-5 w-5 text-white" />
+          ) : (
+            <CalendarX2 className="h-5 w-5 text-slate-700" />
+          )}
+        </div>
+      </div>
+
+      {workout ? (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {workout.exercises.map(([exercise, sets]) => (
+            <div key={exercise} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 p-3 text-sm">
+              <span className="font-medium text-slate-800">{exercise}</span>
+              <span className="shrink-0 rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">
+                {sets}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-2xl bg-slate-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Today focus</p>
+            <p className="mt-1 font-semibold text-slate-900">Hit meals, steps, sleep, and prep basics.</p>
+          </div>
+          {upcoming && (
+            <div className="rounded-2xl bg-blue-50 p-4 text-blue-950 ring-1 ring-blue-100">
+              <p className="text-xs font-semibold uppercase tracking-wide">Next session</p>
+              <p className="mt-1 font-semibold">
+                {upcoming.session} in {upcoming.daysAway} {upcoming.daysAway === 1 ? "day" : "days"}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TodayMealsCard() {
+  return (
+    <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200 lg:col-span-2">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-xl font-bold text-slate-950">Today's meals</h3>
+          <p className="mt-1 text-sm text-slate-500">Repeated daily, with portions split for both of you.</p>
+        </div>
+        <div className="rounded-2xl bg-slate-100 p-3">
+          <Utensils className="h-5 w-5 text-slate-700" />
+        </div>
+      </div>
+
+      <div className="mb-4 grid grid-cols-2 gap-3">
+        <div className="rounded-2xl bg-slate-950 p-4 text-white">
+          <p className="text-sm text-slate-300">You</p>
+          <p className="text-2xl font-bold">{people.him.calories} kcal</p>
+          <p className="text-xs text-slate-300">{people.him.protein}g protein</p>
+        </div>
+        <div className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
+          <p className="text-sm text-slate-500">Wife</p>
+          <p className="text-2xl font-bold text-slate-950">{people.her.calories} kcal</p>
+          <p className="text-xs text-slate-500">{people.her.protein}g protein</p>
+        </div>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-2">
+        {meals.map((meal) => (
+          <div key={meal.name} className="rounded-2xl bg-slate-50 p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{meal.name}</p>
+                <p className="mt-1 font-semibold text-slate-900">{meal.title}</p>
+              </div>
+              <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+                {meal.time}
+              </span>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              You {meal.him.calories} kcal / Wife {meal.her.calories} kcal
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TodayPrepCard({ dayName }) {
+  const todayPrep = prep.find((block) => block.day === dayName);
+
+  if (!todayPrep) return null;
+
+  return (
+    <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-500">Prep today</p>
+          <h3 className="text-xl font-bold text-slate-950">{todayPrep.title}</h3>
+        </div>
+        <div className="rounded-2xl bg-slate-100 p-3">
+          <ChefHat className="h-5 w-5 text-slate-700" />
+        </div>
+      </div>
+      <div className="space-y-2">
+        {todayPrep.items.map((item) => (
+          <div key={item} className="flex gap-2 rounded-2xl bg-slate-50 p-3 text-sm text-slate-700">
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+            <span>{item}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FastWeightEntryCard() {
+  const [selected, setSelected] = useState("him");
+  const [logHim, setLogHim] = useLocalStorage("weight-log-him-v1", []);
+  const [logHer, setLogHer] = useLocalStorage("weight-log-her-v1", []);
+  const log = selected === "him" ? logHim : logHer;
+  const setLog = selected === "him" ? setLogHim : setLogHer;
+  const today = todayISO();
+  const todaysEntry = log.find((entry) => entry.date === today);
+  const latestEntry = [...log].sort((a, b) => b.date.localeCompare(a.date))[0];
+
+  const [weight, setWeight] = useState("");
+  const [status, setStatus] = useState("");
+
+  const saveWeight = (event) => {
+    event.preventDefault();
+    const parsed = Number.parseFloat(weight);
+    if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 500) {
+      setStatus("Enter a valid kg weight.");
+      return;
+    }
+
+    setLog((prev) => {
+      const withoutToday = prev.filter((entry) => entry.date !== today);
+      return [...withoutToday, { date: today, weight: parsed }].sort((a, b) => a.date.localeCompare(b.date));
+    });
+    setWeight("");
+    setStatus(`Saved ${parsed.toFixed(1)} kg for today.`);
+  };
+
+  return (
+    <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-xl font-bold text-slate-950">Fast weigh-in</h3>
+          <p className="mt-1 text-sm text-slate-500">One tap, today's date, existing trend log.</p>
+        </div>
+        <div className="rounded-2xl bg-slate-100 p-3">
+          <Scale className="h-5 w-5 text-slate-700" />
+        </div>
+      </div>
+
+      <div className="mb-3 flex rounded-2xl bg-slate-100 p-1 text-sm font-semibold">
+        <button
+          type="button"
+          onClick={() => {
+            setSelected("him");
+            setStatus("");
+          }}
+          className={`min-h-10 flex-1 rounded-xl px-3 ${selected === "him" ? "bg-white shadow-sm" : "text-slate-500"}`}
+        >
+          You
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setSelected("her");
+            setStatus("");
+          }}
+          className={`min-h-10 flex-1 rounded-xl px-3 ${selected === "her" ? "bg-white shadow-sm" : "text-slate-500"}`}
+        >
+          Wife
+        </button>
+      </div>
+
+      <form onSubmit={saveWeight} className="grid gap-2 sm:grid-cols-[1fr_auto]">
+        <input
+          data-testid="today-weight-input"
+          type="number"
+          step="0.1"
+          inputMode="decimal"
+          placeholder={todaysEntry ? `${todaysEntry.weight.toFixed(1)} kg saved` : "Weight in kg"}
+          value={weight}
+          onChange={(event) => setWeight(event.target.value)}
+          className="min-h-12 rounded-2xl bg-slate-50 px-4 text-base ring-1 ring-slate-200 focus:bg-white"
+        />
+        <button
+          data-testid="today-weight-save"
+          type="submit"
+          className="min-h-12 rounded-2xl bg-slate-950 px-5 text-sm font-semibold text-white hover:bg-slate-800"
+        >
+          Save today
+        </button>
+      </form>
+
+      {status ? (
+        <p
+          className={`mt-3 rounded-2xl p-3 text-sm ring-1 ${
+            status.startsWith("Saved") ? "bg-green-50 text-green-900 ring-green-100" : "bg-rose-50 text-rose-900 ring-rose-100"
+          }`}
+        >
+          {status}
+        </p>
+      ) : (
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <div className="rounded-2xl bg-slate-50 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Today</p>
+            <p className="mt-1 font-bold text-slate-950">{todaysEntry ? `${todaysEntry.weight.toFixed(1)} kg` : "Not logged"}</p>
+          </div>
+          <div className="rounded-2xl bg-slate-50 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Latest</p>
+            <p className="mt-1 font-bold text-slate-950">{latestEntry ? `${latestEntry.weight.toFixed(1)} kg` : "No entries"}</p>
+            {latestEntry && <p className="text-xs text-slate-500">{latestEntry.date}</p>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DailyChecklistCard() {
   const [data, setData] = useLocalStorage("daily-checklist-v1", { date: todayISO(), checked: {} });
   const today = todayISO();
@@ -1159,24 +1443,60 @@ function MealsView() {
   );
 }
 
+function TodayView() {
+  const today = todayISO();
+  const dayName = weekdayName(today);
+
+  return (
+    <div>
+      <SectionTitle icon={CalendarCheck2} eyebrow={readableDate(today)} title="Today">
+        Your workout, food, checklist, and weigh-in.
+      </SectionTitle>
+      <div className="grid gap-5 lg:grid-cols-2">
+        <TodayWorkoutCard dayName={dayName} />
+        <TodayMealsCard />
+        <DailyChecklistCard />
+        <FastWeightEntryCard />
+        <TodayPrepCard dayName={dayName} />
+      </div>
+      <div className="mt-5 rounded-3xl bg-slate-950 p-5 text-white">
+        <div className="flex items-start gap-3">
+          <ClipboardCheck className="mt-0.5 h-5 w-5 shrink-0 text-slate-300" />
+          <div>
+            <h3 className="font-bold">Today’s non-negotiable</h3>
+            <p className="mt-1 text-sm text-slate-300">
+              Log morning weight, follow the four meals, complete the checklist, and do the scheduled lift when one appears.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function FatLossDashboard() {
-  const [tab, setTab] = useState("overview");
-  const CurrentIcon = tabs.find((t) => t.id === tab)?.icon || Users;
+  const [tab, setTab] = useState("today");
+  const currentTab = tabs.find((t) => t.id === tab) || tabs[0];
+  const CurrentIcon = currentTab.icon;
+  const isTodayTab = tab === "today";
+  const heroTitle = isTodayTab ? "Today" : "Fat-Loss Plan Dashboard";
+  const heroCopy = isTodayTab
+    ? `${readableDate(todayISO())}: current workout, meals, checklist, and fast weigh-in.`
+    : "Open to Today for the current workout, meals, checklist, and quick weigh-in. The rest of the dashboard keeps recipes, shopping, training, and trend review close by.";
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-amber-50 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] text-slate-900 md:p-8">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-6 overflow-hidden rounded-[2rem] bg-slate-950 p-6 text-white shadow-xl md:p-8">
+        <div className="mb-6 overflow-hidden rounded-[2rem] bg-slate-950 p-5 text-white shadow-xl md:p-8">
           <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
             <div>
               <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-sm text-slate-200 ring-1 ring-white/15">
                 <CurrentIcon className="h-4 w-4 shrink-0" />
                 Shared meal prep + training system
               </div>
-              <h1 className="text-3xl font-black tracking-tight md:text-5xl">Fat-Loss Plan Dashboard</h1>
+              <h1 className="text-3xl font-black tracking-tight md:text-5xl">{heroTitle}</h1>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300 md:text-base">
-                A simple front end for your repeatable meal plan, recipes, Lulu shopping list, supplement stack, training split
-                and adjustment protocol.
+                {heroCopy}
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm md:w-[360px]">
@@ -1218,6 +1538,7 @@ export default function FatLossDashboard() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.22 }}
         >
+          {tab === "today" && <TodayView />}
           {tab === "overview" && <OverviewView />}
           {tab === "meals" && <MealsView />}
           {tab === "recipes" && <RecipesView />}
